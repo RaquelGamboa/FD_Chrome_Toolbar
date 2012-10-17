@@ -1,0 +1,23 @@
+{
+  "name": "Fetch Deals",
+  "version": "1.0",
+  "manifest_version": 2,
+  "description": "Get the best deals.",
+  "icons": { 	"16": "16_color.jpg",
+				"48": "48_color.jpg",
+				"128": "128_color.jpg" },
+  "browser_action": {
+    "default_icon": "logo.jpg",
+	"default_popup": "popup.html"
+  },
+  "permissions": [
+    "http://raquel.dwalliance.com/fetchdeals/",
+	"tabs",
+	"*://*/*",
+	"webNavigation",
+	"cookies"
+  ],
+  "background": {
+    "scripts": ["main.js"]
+  }
+}
