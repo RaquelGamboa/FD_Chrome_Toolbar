@@ -1,98 +1,87 @@
 
-/*chrome.webNavigation.onBeforeNavigate.addListener(function(objInfo) { 
-	console.log("REF: " + objInfo.url);
-});*/
 
 /*Checks when a tab url is updated*/
 chrome.tabs.onUpdated.addListener(function(tabId, tabInfo) {
-	if (tabInfo.status=="loading"){
-		//console.log("CURRENT: " + tabInfo.url);
-		//console.log("CURRENT ID: " + tabId);
-		chrome.tabs.executeScript(tabId, { file: 'scripts/sendContent.js' } );
+	if (tabInfo.status=="complete"){
 	
+		chrome.tabs.executeScript(tabId, {code: "document.referrer;"}, function(response){
+			var referralURL = response[0];
+			chrome.tabs.executeScript(tabId, {code: "document.location.hostname;"}, function(response){
+				var hostName = response[0];
+				hostName = hostName.replace(/^www./, '');
+				chrome.tabs.executeScript(tabId, {code: "navigator.userAgent;"}, function(response){
+					var browserName = response[0];
+					chrome.tabs.executeScript(tabId, {code: "document.location.href;"}, function(response){
+						var currentURL = response[0];
+						console.log("HOST: " + hostName);
+						console.log("REFERRAL: " + referralURL);
+						console.log("URL: " + currentURL);
+						console.log("BROWSER: " + browserName);
+						
+						getMerchants( function(merchantsList){
+							
+							hostNameMd5 =  calcMD5(hostName);
+														
+							//Compares current hostname with the merchant list
+							for(var i=0;i<merchantsList.length;i++){
+								if (hostNameMd5.toString() == merchantsList[i][0].toString()){
+								
+									console.log("Merchant is on list: "+merchantsList[i][1]+"---"+merchantsList[i][0]);
+									var merchantID = merchantsList[i][1];
+									break;
+								}//if in list
+							} //for
+							getCookies("http://www.fetchdeals.com", "fuid", function(fuidCookie) {
+								getCookies("http://www.fetchdeals.com", "tb", function(tbCookie) {
+									if (tbCookie[0] == 0 && hostName!="fetchdeals.com"){
+										getCookies("http://www.fetchdeals.com", "lb", function(lbCookie) {
+											if (lbCookie[0] == 0){
+												chrome.tabs.query ({active: true},function(tabs) {
+													//console.log("GET TAB ID:"+tabs[0].id);
+													tabId = tabs[0].id;
+													
+														chrome.tabs.executeScript(tabId, {code: "var scriptOptions = {fuid:'"+fuidCookie[0]+"',mpage:'"+currentURL+"'};"}, function(){
+															chrome.tabs.executeScript(tabId, {file: "scripts/bannerLogin.js", runAt:"document_end", allFrames:false}, function(){
+																setSessionCookie("http://www.fetchdeals.com", "lb", "1")
+																console.log ("Login banner displayed");
+															});
+														});
+												
+												});
+											
+											
+											}
+										
+										});
+								
+									}else{ // if member is logged in
+										postData(tbCookie[0], referralURL, currentURL, browserName);
+										getLinks(hostName, tbCookie[0], function(linkData){
+											console.log(linkData);
+											var clickURL=linkData[0][0].toString();
+											var noautoStatus =linkData[0][1].toString();
+										
+										});
+									}
+								});
+							
+							});
+							
+							
+						});// getMerchants
+					});
+				
+				});
+				
+				
+				
+			});
+			
+		});
+		//		
 	}
 
 });
-
-chrome.extension.onRequest.addListener(
-    function(request, sender, sendResponse) {
-        if (request.action == "content")
-        {
-			var hostName = request.host.replace(/^www./, '');
-			var browserName = request.browser;
-			var referralURL = request.referral;
-			var currentURL = request.url;
-			
-            //console.log("URL: " + request.url);
-			//console.log("BROWSER: " + request.browser);
-			//console.log("REFERRAL: " + request.referral);
-			
-			// get merchants list md5
-			getMerchants( function(merchantsList){
-			
-				hostNameMd5 =  calcMD5(hostName);
-				
-				//Compares current hostname with the merchant list
-				for(var i=0;i<merchantsList.length;i++){
-				
-					if (hostNameMd5.toString() == merchantsList[i].toString()){
-						
-						getCookies("http://www.fetchdeals.com", "tb", function(tbCookie) {
-							//console.log("TBCookie: "+tbCookie[0]+" "+tbCookie[1]);
-							getCookies("http://www.fetchdeals.com", "fuid", function(fuidCookie) {
-								//console.log("TBCookie: "+tbCookie[0]+" "+tbCookie[1]);
-								if (tbCookie[0] == 0 && fuidCookie[0] == 0 && hostName!="fetchdeals.com"){ //Redirect if not logged in
-									chrome.tabs.update({url: "http://www.fetchdeals.com/"});
-									chrome.tabs.create({url: "http://www.fetchdeals.com/login.html"});
-									
-								}else{
-									if(tbCookie[0] == 0){
-										tbCookie[0] = fuidCookie[0];
-									}
-									postData(tbCookie[0], referralURL, currentURL, browserName);
-									
-									getCookies("http://www."+hostName, "fdlr", function(hostNameCookie) {
-										//console.log("FDLRCookie: "+hostNameCookie[0]+", "+hostNameCookie[1]);
-										
-										var timeInSeconds = (new Date().getTime() / 1000);
-										if ((hostNameCookie[0]==0)||(hostNameCookie[1]<timeInSeconds)){
-											setCookies("http://www."+hostName);
-											
-											getLinks(hostName, tbCookie[0], function(redirectLink){
-												console.log("Redirecting to ->"+ redirectLink);
-												chrome.tabs.update({url: redirectLink});
-									
-											});
-										
-										
-										}
-									
-									
-									});
-									
-									
-								}//else
-								
-								
-							
-							
-							}); 
-						
-						});
-				  
-					
-					
-					}//if
-					  
-				}//for
-		
-				
-			});//end getMerchants
-			
-			
-
-		}
-    });
 
 
 function getCookies(domain, name, callback) {
@@ -113,6 +102,10 @@ function getCookies(domain, name, callback) {
     });
 	
 };
+function setSessionCookie(domain, cName, cValue){
+	chrome.cookies.set({ url: domain, name: cName, value: cValue});
+};
+
 
 function setCookies(domain){
 	var expSeconds = (new Date().getTime() / 1000)+86400;

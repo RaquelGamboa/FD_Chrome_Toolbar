@@ -19,5 +19,11 @@
   ],
   "background": {
     "scripts": ["main.js"]
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*/*"],
+      "js": ["/scripts/jquery-1.8.0.js"]
+    }
+  ]
 }
