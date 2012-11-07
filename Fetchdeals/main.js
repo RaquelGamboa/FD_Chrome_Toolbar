@@ -1,14 +1,19 @@
 
 
 /*Checks when a tab url is updated*/
-chrome.tabs.onUpdated.addListener(function(tabId, tabInfo) {
+chrome.tabs.onUpdated.addListener(function(tabId, tabInfo, tab) {
+	console.log("TAB Info:"+tabInfo.status);
+	console.log("TAB URL:"+tab.url);
+	var url = (tab.url).indexOf("fetchdeals.com");
+	if( url !== -1 ) return;
+	
 	if (tabInfo.status=="complete"){
 	
 		chrome.tabs.executeScript(tabId, {code: "document.referrer;"}, function(response){
 			var referralURL = response[0];
 			chrome.tabs.executeScript(tabId, {code: "document.location.hostname;"}, function(response){
 				var hostName = response[0];
-				hostName = hostName.replace(/^www./, '');
+				hostName = getDomain(hostName);
 				chrome.tabs.executeScript(tabId, {code: "navigator.userAgent;"}, function(response){
 					var browserName = response[0];
 					chrome.tabs.executeScript(tabId, {code: "document.location.href;"}, function(response){
@@ -21,6 +26,7 @@ chrome.tabs.onUpdated.addListener(function(tabId, tabInfo) {
 						getMerchants( function(merchantsList){
 							
 							hostNameMd5 =  calcMD5(hostName);
+							merchantFound = "NO";
 														
 							//Compares current hostname with the merchant list
 							for(var i=0;i<merchantsList.length;i++){
@@ -28,17 +34,23 @@ chrome.tabs.onUpdated.addListener(function(tabId, tabInfo) {
 								
 									console.log("Merchant is on list: "+merchantsList[i][1]+"---"+merchantsList[i][0]);
 									var merchantID = merchantsList[i][1];
+									merchantFound = "YES";
 									break;
 								}//if in list
 							} //for
-							getCookies("http://www.fetchdeals.com", "fuid", function(fuidCookie) {
-								getCookies("http://www.fetchdeals.com", "tb", function(tbCookie) {
-									if (tbCookie[0] == 0 && hostName!="fetchdeals.com"){
+							if (merchantFound == "YES"){
+								getCookies("http://www.fetchdeals.com", "fuid", function(fuidCookie) {
+									getCookies("http://www.fetchdeals.com", "tb", function(tbCookie) {
 										getCookies("http://www.fetchdeals.com", "lb", function(lbCookie) {
-											if (lbCookie[0] == 0){
-												chrome.tabs.query ({active: true},function(tabs) {
-													//console.log("GET TAB ID:"+tabs[0].id);
-													tabId = tabs[0].id;
+											console.log("FUID:"+fuidCookie);
+											console.log("TB:"+tbCookie);
+											console.log("LB:"+lbCookie);
+										
+											if (tbCookie[0] == 0 && hostName!="fetchdeals.com" && lbCookie[0] == 0){
+										
+												//chrome.tabs.query ({active: true},function(tabs) {
+													
+													//tabId = tabs[0].id;
 													
 														chrome.tabs.executeScript(tabId, {code: "var scriptOptions = {fuid:'"+fuidCookie[0]+"',mpage:'"+currentURL+"'};"}, function(){
 															chrome.tabs.executeScript(tabId, {file: "scripts/bannerLogin.js", runAt:"document_end", allFrames:false}, function(){
@@ -47,26 +59,94 @@ chrome.tabs.onUpdated.addListener(function(tabId, tabInfo) {
 															});
 														});
 												
+												//});
+									
+											}else{ // if member is logged in
+												
+												if (fuidCookie[0] == 0){
+													fuidCookie[0]=generateFuidCookie();                                
+												}
+												if (tbCookie[0] == 0 ){
+													tbCookie[0]=fuidCookie[0];
+												}
+												
+												//postData(tbCookie[0], referralURL, currentURL, browserName);
+												getLinks(hostName, tbCookie[0], function(linkData){
+													console.log(linkData);
+													var clickURL=linkData[0][0].toString();
+													var NoAutoStatus =linkData[0][1].toString();
+													
+													console.log ("get Links"+clickURL+"--"+NoAutoStatus);
+													
+													getCookies("http://"+hostName, "fdlr", function(fdlrCookie){
+														var timeInSeconds = (new Date().getTime() / 1000);
+														console.log("FDLR: "+fdlrCookie[0]);
+														if ((fdlrCookie[0]==1) && !(fdlrCookie[1]<timeInSeconds) ){
+															
+															chrome.tabs.executeScript(tabId, {code: "var scriptOptions = {mid:'"+merchantID+"'}"}, function(){
+																chrome.tabs.executeScript(tabId, {file: "scripts/banner.js", runAt:"document_end", allFrames:false}, function(){
+																	setCookies("http://"+hostName, "2"); // Banner
+																	console.log ("Redirected banner displayed");
+																});
+															});
+															
+															
+														
+														}//else{
+															NoAuto = CheckAutoRedirect(currentURL, referralURL);
+															console.log("NOauto= "+NoAuto);
+															
+															// auto redirect when the cookie is 0 and noAuto =0
+															if (( fdlrCookie[0]==0 || fdlrCookie[1]<timeInSeconds ) && (NoAuto==0 && NoAutoStatus==0)){
+																console.log("Redirecting");
+																setCookies("http://"+hostName, "1"); //Redirected 
+																chrome.tabs.update({url: clickURL}); 
+															}
+															
+															// show click banner
+															if (( fdlrCookie[0]==0 || fdlrCookie[1]<timeInSeconds ) && (NoAuto==1 || NoAutoStatus==1)){
+																
+																chrome.tabs.executeScript(tabId, {code: "var scriptOptions = {mid:'"+merchantID+"', memid:'"+tbCookie[0]+"'}"}, function(){
+																	chrome.tabs.executeScript(tabId, {file: "scripts/bannerNoAuto.js", runAt:"document_end", allFrames:false}, function(){
+																		setCookies("http://"+hostName, "3"); // Banner
+																		console.log ("Click banner displayed");
+																	});
+																});
+																  
+															}
+															
+															if (fdlrCookie[0]==3 && !(fdlrCookie[1]<timeInSeconds)){
+																
+																getBannerClick(merchantID,tbCookie[0], function(response){
+																	console.log("SHOW SECOND BANNER RESPNSE:"+response);  
+																	if (response =="Updated to 0"){ //banner one displayed and click
+																		chrome.tabs.executeScript(tabId, {code: "var scriptOptions = {mid:'"+merchantID+"', memid:'"+tbCookie[0]+"'}"}, function(){
+																			chrome.tabs.executeScript(tabId, {file: "scripts/bannerNoAuto2.js", runAt:"document_end", allFrames:false}, function(){
+																				setCookies("http://"+hostName, "4"); // Banner
+																				console.log ("Congrats banner displayed");
+																			});
+																		});
+																	}//if
+																
+																});//bannerclick
+															}
+														
+														//}
+														
+														
+													});			
+													                                                             
+													
+													
+												
 												});
-											
-											
+												
 											}
-										
 										});
+									});
 								
-									}else{ // if member is logged in
-										postData(tbCookie[0], referralURL, currentURL, browserName);
-										getLinks(hostName, tbCookie[0], function(linkData){
-											console.log(linkData);
-											var clickURL=linkData[0][0].toString();
-											var noautoStatus =linkData[0][1].toString();
-										
-										});
-									}
 								});
-							
-							});
-							
+							}
 							
 						});// getMerchants
 					});
@@ -82,6 +162,24 @@ chrome.tabs.onUpdated.addListener(function(tabId, tabInfo) {
 	}
 
 });
+
+function getDomain(url){
+    url = url.split(".");
+    var hostName = "";
+    if (url.length !=2){
+        for(var i = url.length-1; i>0; i--){
+            if (hostName==""){ 
+                hostName=url[url.length -i];
+            }else{
+                hostName=hostName+"."+url[url.length -i];
+            }
+        }
+    }else{
+        hostName=url[url.length -2]+"."+url[url.length -1];
+    }
+    console.log("DOMAIN NAME: "+hostName);    
+    return hostName;
+};
 
 
 function getCookies(domain, name, callback) {
@@ -107,11 +205,69 @@ function setSessionCookie(domain, cName, cValue){
 };
 
 
-function setCookies(domain){
-	var expSeconds = (new Date().getTime() / 1000)+86400;
-	chrome.cookies.set({ url: domain, name: "fdlr", value: "1", expirationDate: expSeconds });
+function setCookies(domain, cValue){
+	var expSeconds = (new Date().getTime() / 1000)+21600; //6 hours
+	chrome.cookies.set({ url: domain, name: "fdlr", value: cValue, expirationDate: expSeconds });
 };
 
+function generateFuidCookie(){
+    var fuid="";
+    var c="bcdfghjklmnprstvwxyz".split("");
+    var v="aeiou".split("");
+    var now = new Date();
+    fuid = c[Math.floor(Math.random() * (20))];
+    fuid = fuid + Math.floor(Math.random() * (9999));
+    fuid = fuid + v[Math.floor(Math.random() * (5))];
+    fuid = fuid + c[Math.floor(Math.random() * (20))];
+    fuid = fuid + v[Math.floor(Math.random() * (5))];
+    fuid = fuid + c[Math.floor(Math.random() * (20))];
+    fuid = fuid + Math.floor(Math.random() * (999999));
+    fuid = fuid + now.getFullYear()+ (now.getMonth()+1) + now.getDate() + now.getHours()+ now.getMinutes() + now.getSeconds();
+    fuid = "G" + fuid;
+    console.log("NEW FUID:"+fuid);
+    
+    var expSeconds = (new Date().getTime() / 1000)+86400;
+	chrome.cookies.set({ url: "http://www.fetchdeals.com", name: "fuid", value: fuid, expirationDate: expSeconds });
+    return (fuid);
+         
+};
+/*Check if the merchant URL has properties to autoredirect or not*/
+function CheckAutoRedirect(currentURL, referralURL){
+    
+    findGoogle = referralURL.search(/.google./i);
+    findAclk = referralURL.search(/aclk/i);
+    findAfsrc = currentURL.search(/afsrc=1/i);
+    
+    if (((findGoogle!=-1)&&(findAclk!=-1))|| (findAfsrc!=-1)){
+    
+        return 1;
+    }else{
+        return 0;
+    }
+    
+    console.log("FIND GOOGLE: "+findGoogle); 
+    console.log("FIND ACLK: "+findAclk); 
+    console.log("FIND AFSRC: "+findAfsrc); 
+    
+};
+
+/* Get data if the banner was clicked*/
+function getBannerClick(merchantId, memberId, callback){
+	var xhr = new XMLHttpRequest();
+	xhr.open("GET", "http://raquel.dwalliance.com/fetchdeals/api_set_bannerclick.php?merid="+merchantId+"&mid="+memberId+"&from_addon=y", true);
+	xhr.onreadystatechange = function() {
+	  if (xhr.readyState == 4) {
+		if (xhr.status == 200) {
+			var data = xhr.responseText;
+			callback(data);
+		  } else {
+			callback(null);
+		  }
+	  }
+	}
+xhr.send();
+
+};
 
 
 /* Get the list of all merchants in MD5*/
@@ -138,7 +294,7 @@ function getLinks(hostName, memberId, callback){
 	xhr.onreadystatechange = function() {
 	  if (xhr.readyState == 4) {
 		if (xhr.status == 200) {
-			var data = xhr.responseText;
+			var data = JSON.parse(xhr.responseText);
 			callback(data);
 		  } else {
 			callback(null);

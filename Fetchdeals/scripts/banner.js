@@ -1,6 +1,6 @@
 
 var bannercontent ='';
-bannercontent = bannercontent+'<iframe id="banner" src="http://raquel.dwalliance.com/fetchdeals/banners/banner_login.php?fuid='+scriptOptions.fuid+'&mpage='+scriptOptions.mpage+'" scrolling="no"></iframe>';
+bannercontent = bannercontent+'<iframe id="banner" src="http://raquel.dwalliance.com/fetchdeals/banners/banner_autoredirect.php?mid='+scriptOptions.mid+'" scrolling="no"></iframe>';
 
 
 var stylecontent = '<style>';
