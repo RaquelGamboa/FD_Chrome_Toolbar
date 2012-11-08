@@ -1,3 +1,12 @@
+var activeAfsrcTabs = [];
+chrome.webRequest.onBeforeRedirect.addListener(function(details) {
+	console.log("ON BEFORE REDIRECT:" + details.tabId);
+	console.log("ON BEFORE REDIRECT:" + details.url);
+	if(CheckAfsrc(details.url)==1){
+		ActivateAfsrcTab(details.tabId);
+	}
+}, {urls: ["<all_urls>"]});
+
 
 
 /*Checks when a tab url is updated*/
@@ -6,6 +15,9 @@ chrome.tabs.onUpdated.addListener(function(tabId, tabInfo, tab) {
 	console.log("TAB URL:"+tab.url);
 	var url = (tab.url).indexOf("fetchdeals.com");
 	if( url !== -1 ) return;
+	if(tabInfo.status=="loading"){
+		console.log("-----ENTER IN LOADING:"+tab.url);
+	}
 	
 	if (tabInfo.status=="complete"){
 	
@@ -94,6 +106,10 @@ chrome.tabs.onUpdated.addListener(function(tabId, tabInfo, tab) {
 														
 														}//else{
 															NoAuto = CheckAutoRedirect(currentURL, referralURL);
+															if(IsActiveAfsrcTab(tabId)==1){
+																NoAuto=1;
+																DeactivateAfsrcTab(tabId);
+															}
 															console.log("NOauto= "+NoAuto);
 															
 															// auto redirect when the cookie is 0 and noAuto =0
@@ -162,6 +178,40 @@ chrome.tabs.onUpdated.addListener(function(tabId, tabInfo, tab) {
 	}
 
 });
+
+//------Checks if the current tab is activated by afsrc=1
+function IsActiveAfsrcTab(tabId){
+     if (activeAfsrcTabs.indexOf(tabId) != -1){
+         return 1;
+     }else{
+         return 0;
+     }
+};
+//------Deactivate current tab after is used by afsrc=1
+function DeactivateAfsrcTab(tabId){
+    var index = activeAfsrcTabs.indexOf(tabId);
+    activeAfsrcTabs.splice(index, 1);
+    console.log("Array after deactivate: "+activeAfsrcTabs);
+};
+//------Activate current tab if afsrc=1
+function ActivateAfsrcTab(tabId){
+     if (activeAfsrcTabs.indexOf(tabId) == -1){
+         activeAfsrcTabs.splice(-1,0,tabId);
+     }
+     console.log("Array after activate: "+activeAfsrcTabs);
+};
+//------Checks if current URL has afsrc = 1
+function CheckAfsrc(currentURL){
+    findAfsrc = currentURL.search(/afsrc=1/i);
+    if (findAfsrc!=-1){
+        return 1;
+    }else{
+        return 0;
+    }
+};
+
+
+
 
 function getDomain(url){
     url = url.split(".");

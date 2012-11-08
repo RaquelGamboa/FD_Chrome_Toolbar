@@ -15,6 +15,7 @@
 	"tabs",
 	"*://*/*",
 	"webNavigation",
+	"webRequest",
 	"cookies"
   ],
   "background": {
